@@ -1,0 +1,11 @@
+name: Release and Tagging for Registration
+on:
+  schedule:
+    - cron: 0 * * * *
+jobs:
+  tagbot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: JuliaRegistries/TagBot@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
