@@ -9,11 +9,16 @@
 #SBATCH --partition=class
 #SBATCH --account=class
 #SBATCH --qos=default                       # set QOS, this will determine what resources can be
+#SBATCH --gres=gpu:1
 
-module load Python/2.7.9                                        # run any commands necessary to setup your environment
+srun --partition=class --account=class --qos=default bash -c "
+julia --project=. -e '
+    include(\"cifar_classification.jl\");
+    train()
+'; 
+echo \"Done.\"" &
+# use srun to invoke commands within your job; using an '&'
 
-srun bash -c "hostname; python --version" &    # use srun to invoke commands within your job; using an '&'
-srun bash -c "hostname; python --version" &    # will background the process allowing them to run concurrently
 wait                                                            # wait for any background processes to complete
 
 # once the end of the batch script is reached your job allocation will be revoked
