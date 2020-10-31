@@ -1,6 +1,6 @@
 using FFTW
 using Flux
-using Flux: unsqueeze, glorot_uniform, expand, calc_padding, convfilter
+using Flux: unsqueeze, glorot_uniform, expand, calc_padding, convfilter, @functor
 
 function padto(A, final_size)
 	@assert ndims(A) == length(final_size)
@@ -48,6 +48,8 @@ function GeneralARMAConv(
     GeneralARMAConv(weight, bias, σ,
         stride = stride, pad = pad, dilation = dilation)
 end
+
+@functor GeneralARMAConv
 
 function (c::GeneralARMAConv)(x::AbstractArray)
     if size(c.weight, 3) != size(x, 3)  # TODO: using 3 may be too specific here?
