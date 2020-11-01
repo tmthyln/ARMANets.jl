@@ -80,7 +80,7 @@ end
 function train_cifar!(device = cpu, max_epochs = 100)
     train, val = cifartrain(CIFAR10)
     x_val, y_val = val
-    m = network() |> cpu
+    m = network(true) |> cpu
     loss(x, y) = Flux.logitcrossentropy(m(x), y)
     opt = ADAM(3e-4)
 

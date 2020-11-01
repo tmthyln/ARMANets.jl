@@ -13,11 +13,8 @@
 srun --partition=class --account=class --qos=default bash -c "
 julia --project=. -e '
     include(\"cifar_classification.jl\");
-    train()
+    train_cifar!(gpu)
 '; 
 echo \"Done.\"" &
-# use srun to invoke commands within your job; using an '&'
 
-wait                                                            # wait for any background processes to complete
-
-# once the end of the batch script is reached your job allocation will be revoked
+wait
