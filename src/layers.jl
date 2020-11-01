@@ -56,5 +56,5 @@ function (c::GeneralARMAConv)(x::AbstractArray)
         throw(DimensionMismatch("Input channels must match! ($(size(c.weight, 3)) vs. $(size(x, 3))"))
     end
 
-    real.(ifft(rfft(x, 1:2) ./ rfft(padto(c.weight, size(x)), 1:2), 1:2))
+    real.(ifft(fft(x, 1:2) ./ fft(padto(c.weight, size(x)), 1:2), 1:2))
 end

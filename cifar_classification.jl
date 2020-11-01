@@ -27,7 +27,7 @@ function cifartrain(dataset, val_split = 0.01)
     train_data = (inputs[:, :, :, train_examples], outputs[:, train_examples])
     val_data = inputs[:, :, :, val_examples], outputs[:, val_examples]
 
-    (Flux.Data.DataLoader(train_data, shuffle=true, batchsize=32), val_data)
+    (Flux.Data.DataLoader(train_data, shuffle=true, batchsize=64), val_data)
 end
 
 function smalldata(dataset, num_examples = 32)
@@ -47,20 +47,29 @@ function smalldata(dataset, num_examples = 32)
     Flux.Data.DataLoader((inputs, outputs), shuffle=true, batchsize=8)
 end
 
-function network(conv = Conv)
+function conv_layer(kernel, dims, activation, arma = false)
+    conv = Conv(kernel, dims, activation, pad=(1, 1), stride=(1, 1))
+    if arma
+        return Chain(conv, GeneralARMAConv(kernel, dims[2]))
+    else
+        return conv
+    end
+end
+
+function network(use_arma = false)
     return Chain(
-            conv((3, 3), 3 => 64, relu, pad=(1, 1), stride=(1, 1)),
-            conv((3, 3), 64 => 64, relu, pad=(1, 1), stride=(1, 1)),
+            conv_layer((3, 3), 3 => 64, relu, use_arma),
+            conv_layer((3, 3), 64 => 64, relu, use_arma),
             MaxPool((2, 2)),
-            conv((3, 3), 64 => 128, relu, pad=(1, 1), stride=(1, 1)),
-            conv((3, 3), 128 => 128, relu, pad=(1, 1), stride=(1, 1)),
+            conv_layer((3, 3), 64 => 128, relu, use_arma),
+            conv_layer((3, 3), 128 => 128, relu, use_arma),
             MaxPool((2, 2)),
-            conv((3, 3), 128 => 256, relu, pad=(1, 1), stride=(1, 1)),
-            conv((3, 3), 256 => 256, relu, pad=(1, 1), stride=(1, 1)),
+            conv_layer((3, 3), 128 => 256, relu, use_arma),
+            conv_layer((3, 3), 256 => 256, relu, use_arma),
             MaxPool((2, 2)),
-            conv((3, 3), 256 => 512, relu, pad=(1, 1), stride=(1, 1)),
-            conv((3, 3), 512 => 512, relu, pad=(1, 1), stride=(1, 1)),
-            conv((3, 3), 512 => 512, relu, pad=(1, 1), stride=(1, 1)),
+            conv_layer((3, 3), 256 => 512, relu, use_arma),
+            conv_layer((3, 3), 512 => 512, relu, use_arma),
+            conv_layer((3, 3), 512 => 512, relu, use_arma),
             MaxPool((2, 2)),
             flatten,
             Dense(2*2*512, 4096, relu),
@@ -68,25 +77,27 @@ function network(conv = Conv)
             Dense(4096, 10))
 end
 
-function train_cifar!()
-    train = smalldata(CIFAR10)
-    m = network() |> gpu
+function train_cifar!(device = cpu, max_epochs = 100)
+    train, val = cifartrain(CIFAR10)
+    x_val, y_val = val
+    m = network() |> cpu
     loss(x, y) = Flux.logitcrossentropy(m(x), y)
     opt = ADAM(3e-4)
 
     local training_loss
     ps = params(m)
-    for epoch in 1:20
+    for epoch in 1:max_epochs
+        println("Epoch $epoch of $max_epochs")
         for (x, y) in train
             gs = gradient(ps) do
-                training_loss = loss(gpu(x), gpu(y))
-                return training_loss
+                training_loss = loss(device(x), device(y))
             end
 
-            println("\tTraining Loss on Batch: $(training_loss)")
+            print("\tBatch Training Loss: $(training_loss)\t\t\r")
             Flux.update!(opt, ps, gs)
-            # Here you might like to check validation set accuracy
         end
+
+        println("Validation Loss: $(loss(x_val, y_val))")
     end
     
     weights = params(cpu(m))
