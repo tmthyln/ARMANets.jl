@@ -1,4 +1,4 @@
-name: Unit Tests
+name: Nightly Tests
 
 on:
   push:
@@ -16,7 +16,6 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest]
-        julia-version: ['1.0', '1.5']
 
     steps:
     # Checks-out repository under $GITHUB_WORKSPACE
@@ -24,7 +23,7 @@ jobs:
     - name: Setup Julia environment
       uses: julia-actions/setup-julia@v1.4
       with:
-        version: ${{ matrix.julia-version }}
+        version: 'nightly'
         arch: x64
     - uses: julia-actions/julia-buildpkg@latest
     - uses: julia-actions/julia-runtest@latest

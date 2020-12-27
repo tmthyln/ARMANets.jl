@@ -1,6 +1,6 @@
 module ARMANets
 
-export GeneralARMAConv, padto
+export ARConv
 
 include("layers.jl")
 

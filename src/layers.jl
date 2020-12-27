@@ -1,6 +1,13 @@
 using FFTW
 using Flux
-using Flux: unsqueeze, glorot_uniform, expand, calc_padding, convfilter, @functor
+using Tullio
+
+function bounded_uniform(rng::AbstractRNG, init, dims...)
+	bound = -log(1 - init)
+	return 2bound .* rand(rng, Float32, dims...) .- bound
+end
+bounded_uniform(init, dims...) = bounded_uniform(Random.GLOBAL_RNG, init, dims...)
+bounded_uniform(rng::AbstractRNG, init) = (dims...) -> bounded_uniform(rng, init, dims...)
 
 function padto(A, final_size)
 	@assert ndims(A) == length(final_size)
@@ -8,53 +15,84 @@ function padto(A, final_size)
 	A_size = size(A)[1:2]
 	c_size = size(A)[3:end]
 
-	top, left = (final_size[1:2] .- A_size) .÷ 2
-	bottom, right = final_size[1:2] .- (top, left) .- A_size
+	bottom, right = cld.(final_size[1:2] .- A_size, 2) .- 1
+	top, left = final_size[1:2] .- (bottom, right) .- A_size
 
-	[zeros(A_type, top, final_size[2], c_size...);
-	zeros(A_type, A_size[1], left, c_size...) A zeros(A_type, A_size[1], right, c_size...);
-	zeros(A_type, bottom, final_size[2], c_size...)]
+	vcat(zeros(A_type, top, final_size[2], c_size...),
+	hcat(zeros(A_type, A_size[1], left, c_size...), A, zeros(A_type, A_size[1], right, c_size...)),
+	zeros(A_type, bottom, final_size[2], c_size...))
 end
 
-struct GeneralARMAConv{N,M,F,A,V}
-    σ::F
-    weight::A
-    bias::V
-    stride::NTuple{N,Int}
-    pad::NTuple{M,Int}
-    dilation::NTuple{N,Int}
+struct ARConv{F,A,W,C}
+    filters::Int
+	σ::F
+	alpha::A
+	weight::W
+    center::C
 end
 
-function GeneralARMAConv(
-        w::AbstractArray{T,N}, b::Union{Flux.Zeros, AbstractVector{T}}, σ = identity;
-        stride = 1, pad = 0, dilation = 1) where {T,N}
+function ARConv(filters, channels, σ=identity;
+    	init=bounded_uniform(Random.GLOBAL_RNG, 0.1), dilation=1)
 
-    stride = expand(Val(N-2), stride)
-    dilation = expand(Val(N-2), dilation)
-    pad = calc_padding(pad, size(w)[1:N-2], dilation, stride)
-    return GeneralARMAConv(σ, w, b, stride, pad, dilation)
+	alpha = init(2, 2, channels, filters ÷ 2)
+
+    weight = zeros(2, 2dilation + 1)
+    weight[1, 1] = cos(-π / 4)
+    weight[2, 1] = sin(-π / 4)
+    weight[1, 2] = -sin(-π / 4)
+    weight[2, 2] = cos(-π / 4)
+
+    center = zeros(1, 2dilation + 1)
+    center[1, cld(size(center, 2), 2)] = 1
+
+	ARConv(filters, σ, alpha, weight, center)
 end
 
-function GeneralARMAConv(;weight::AbstractArray{T,N}, bias::Union{Flux.Zeros, AbstractVector{T}},
-          activation = identity, stride = 1, pad = 0, dilation = 1) where {T,N}
-    GeneralARMAConv(weight, bias, activation, stride = stride, pad = pad, dilation = dilation)
+Flux.@functor ARConv
+Flux.trainable(c::ARConv) = (c.alpha,)
+
+function Base.show(io::IO, c::ARConv)
+    components = String[]
+
+    push!(components, string("(", c.filters, ", ", c.filters, ")"))
+
+    push!(components, string(size(c.alpha, 3)))
+
+    c.σ != identity && push!(components, string(c.σ))
+
+    dilation = length(c.center) ÷ 2
+    dilation != 1 && push!(components, string("dilation=", dilation))
+
+    print(io, "ARConv(")
+    print(io, join(components, ", "))
+    print(io, ")")
 end
 
-function GeneralARMAConv(
-        k::NTuple{N,Integer}, ch::Integer, σ = identity;
-        init = glorot_uniform,  stride = 1, pad = 0, dilation = 1,
-        weight = convfilter(k, ch => 1, init = init), bias = Flux.Zeros()) where N
+function (c::ARConv)(x::AbstractArray)
+	alpha = tanh.(c.alpha)
+	weight = c.weight
+    center = c.center
 
-    GeneralARMAConv(weight, bias, σ,
-        stride = stride, pad = pad, dilation = dilation)
+	# size: [2, 2, c, b] x [2, 3] -> [2, 3, c, b]
+	@tullio Axy[i, k, c, b] := alpha[i, j, c, b] * weight[j, k]
+    Axy = Axy .+ center
+
+	# size: [2, 3, c, b] -> [3, c, b], [3, c, b]
+	Ax, Ay = collect(eachslice(Axy, dims=1))
+
+	# size: [3, c, b] x [3, c, b] -> [3, 3, c, b]
+	@tullio A[i, j, c, b] := Ax[i, c, b] * Ay[j, c, b]
+
+	Apad = fftshift(padto(A, size(x)), 1:2)
+
+	fft_convolve(x, Apad)
 end
 
-@functor GeneralARMAConv
+function fft_convolve(x, a)
+    X = fft(x, 1:2)
+	A = prod(fft(a, 1:2), dims=4)
 
-function (c::GeneralARMAConv)(x::AbstractArray)
-    if size(c.weight, 3) != size(x, 3)  # TODO: using 3 may be too specific here?
-        throw(DimensionMismatch("Input channels must match! ($(size(c.weight, 3)) vs. $(size(x, 3))"))
-    end
+	@tullio Y[i1, i2, c, b] := X[i1, i2, c, b] / A[i1, i2, c, x]
 
-    real.(ifft(fft(x, 1:2) ./ fft(padto(c.weight, size(x)), 1:2), 1:2))
+	return real.(ifft(Y, 1:2))
 end
