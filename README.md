@@ -1,7 +1,7 @@
 # ARMANets.jl
 This is an implementation of ARMA layers and ARMA networks in Julia, based on the paper [ARMA Nets: Expanding Receptive Field for Dense Prediction](https://arxiv.org/abs/2002.11609) (Su, Jiahao; Wang, Shiqi; Huang, Furong). The layers are a drop-in replacement (or addition) for standard convolutional layers.
 
-See the [documentation] for more details.
+See the [documentation](https://tmthyln.github.io/ARMANets.jl/latest/) for more details.
 
 ## Citation
 The original paper can be cited via

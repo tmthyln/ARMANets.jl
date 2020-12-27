@@ -31,7 +31,7 @@ struct ARConv{F,A,W,C}
     center::C
 end
 
-function ARConv(filters, channels, σ=identity;
+function ARConv(filters::Int, channels, σ=identity;
     	init=bounded_uniform(Random.GLOBAL_RNG, 0.1), dilation=1)
 
 	alpha = init(2, 2, channels, filters ÷ 2)
@@ -39,8 +39,8 @@ function ARConv(filters, channels, σ=identity;
     weight = zeros(2, 2dilation + 1)
     weight[1, 1] = cos(-π / 4)
     weight[2, 1] = sin(-π / 4)
-    weight[1, 2] = -sin(-π / 4)
-    weight[2, 2] = cos(-π / 4)
+    weight[1, size(weight, 2)] = -sin(-π / 4)
+    weight[2, size(weight, 2)] = cos(-π / 4)
 
     center = zeros(1, 2dilation + 1)
     center[1, cld(size(center, 2), 2)] = 1
