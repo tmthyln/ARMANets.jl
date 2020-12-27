@@ -10,3 +10,6 @@ Tullio = "bc48ee85-29a4-5162-ae0b-a64e1601d4bc"
 
 [compat]
 julia = "1"
+FFTW = "1"
+Flux = "0.11"
+Tullio = "0.2"
