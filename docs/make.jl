@@ -15,6 +15,6 @@ makedocs(
 
 deploydocs(
     repo = "github.com/tmthyln/ARMANets.jl.git",
-    devbranch = "main",
+    devbranch = "master",
     devurl="latest"
     )
