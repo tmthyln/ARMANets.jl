@@ -1,6 +1,7 @@
 using FFTW
 using Flux
 using Tullio
+using Random
 
 function bounded_uniform(rng::AbstractRNG, init, dims...)
 	bound = -log(1 - init)
